@@ -132,13 +132,19 @@ def scrape_transactions(session: requests.Session) -> list[dict]:
         trlist_tds = tr.select("td.trlist")
         if len(trlist_tds) < 4:
             continue
-        # 重複セルの先頭のみ取得
-        date_text = trlist_tds[0].get_text(strip=True)
-        face_text = trlist_tds[1].get_text(strip=True)
-        price_text = trlist_tds[2].get_text(strip=True)
-        rate_text = trlist_tds[3].get_text(strip=True)
+        # 各 td 内は PC用とモバイル用のテキストが重複して含まれる
+        # get_text() で繋がるため、正規表現で最初のマッチのみ抽出する
+        date_raw = trlist_tds[0].get_text(" ", strip=True)
+        face_raw = trlist_tds[1].get_text(" ", strip=True)
+        price_raw = trlist_tds[2].get_text(" ", strip=True)
+        rate_raw = trlist_tds[3].get_text(" ", strip=True)
 
-        # --- 日時パース "03/14 21:47" ---
+        # --- 日時パース: 最初の "MM/DD HH:MM" を取得 ---
+        m_date = re.search(r"(\d{2}/\d{2} \d{2}:\d{2})", date_raw)
+        if not m_date:
+            print(f"[{SITE_NAME}] 日時パース失敗: {date_raw!r}", flush=True)
+            continue
+        date_text = m_date.group(1)
         try:
             dt_jst = datetime.strptime(
                 f"{now_jst.year}/{date_text}", "%Y/%m/%d %H:%M"
@@ -151,8 +157,8 @@ def scrape_transactions(session: requests.Session) -> list[dict]:
             print(f"[{SITE_NAME}] 日時パース失敗: {date_text!r}", flush=True)
             continue
 
-        # --- 額面パース "10,000円" ---
-        m_face = re.search(r"([\d,]+)", face_text)
+        # --- 額面パース: 最初の "数字,数字円" を取得 ---
+        m_face = re.search(r"([\d,]+)円", face_raw)
         if not m_face:
             continue
         try:
@@ -160,8 +166,8 @@ def scrape_transactions(session: requests.Session) -> list[dict]:
         except ValueError:
             continue
 
-        # --- 成立価格パース "8,450円" ---
-        m_price = re.search(r"([\d,]+)", price_text)
+        # --- 成立価格パース ---
+        m_price = re.search(r"([\d,]+)円", price_raw)
         if not m_price:
             continue
         try:
@@ -169,8 +175,8 @@ def scrape_transactions(session: requests.Session) -> list[dict]:
         except ValueError:
             continue
 
-        # --- 割引率パース "84.5%" → discount = 15.5 ---
-        m_rate = re.search(r"(\d+(?:\.\d+)?)\s*%", rate_text)
+        # --- 割引率パース: 最初の "数字%" を取得 ---
+        m_rate = re.search(r"(\d+(?:\.\d+)?)\s*%", rate_raw)
         if not m_rate:
             continue
         try:

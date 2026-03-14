@@ -5,9 +5,12 @@
 サーバーレンダリング（requests で直接取得可能）
 
 各 tbody tr のtd構造:
-  td.ftlg20.ftmd20 -> 額面 "50,000 円"
-  td.ftlg22.ftmd22 -> 販売価格 "47,500 円"
-  td.ftlg13.ftmd13 -> 率・割引額 "95 % │ 2,500 円OFF"  ← ここから率を取得
+  td.ftlg13.ftmd13 [0] -> 枚数 "2 点"
+  td.ftlg20.ftmd20     -> 額面 "50,000 円"
+  td.ftlg22.ftmd22     -> 販売価格 "47,500 円"
+  td.ftlg13.ftmd13 [1] -> 率・割引額 "95 % │ 2,500 円OFF"  ← ここから率を取得（2番目）
+  td.ftlg13.ftmd13 [2] -> エラー/出品数 "1126 / 14379"
+  td.ftlg13.ftmd13 [3] -> ボタン "買 う"
 
 割引率 = 100 - 販売率（95% → 5%）
 
@@ -43,8 +46,12 @@ def scrape(session: requests.Session) -> Optional[dict]:
 
     discount_rates: list[float] = []
     for tr in soup.select("tbody tr"):
-        # 販売率セル: "95 % │ 2,500 円OFF" のようなテキストを含む td.ftlg13
-        rate_td = tr.select_one("td.ftlg13")
+        # 販売率セル: td.ftlg13 は行に4つある（枚数/率/エラー数/ボタン）
+        # 率は 2番目（index 1）: "95 % │ 2,500 円OFF"
+        ftlg13_tds = tr.select("td.ftlg13")
+        if len(ftlg13_tds) < 2:
+            continue
+        rate_td = ftlg13_tds[1]
         if not rate_td:
             continue
         text = rate_td.get_text(" ", strip=True)
