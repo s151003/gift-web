@@ -8,19 +8,24 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function fetchLatestSnapshots() {
-  return fetchJSON<{ data: PriceSnapshot[] }>(`${BASE_URL}/api/snapshots/latest`);
+export function fetchLatestSnapshots(cardType?: string) {
+  const params = new URLSearchParams();
+  if (cardType) params.set("card_type", cardType);
+  const qs = params.toString();
+  return fetchJSON<{ data: PriceSnapshot[] }>(`${BASE_URL}/api/snapshots/latest${qs ? `?${qs}` : ""}`);
 }
 
-export function fetchSnapshots(hours: number, site?: string) {
+export function fetchSnapshots(hours: number, site?: string, cardType?: string) {
   const params = new URLSearchParams({ hours: String(hours) });
   if (site) params.set("site", site);
+  if (cardType) params.set("card_type", cardType);
   return fetchJSON<{ data: PriceSnapshot[] }>(`${BASE_URL}/api/snapshots?${params}`);
 }
 
-export function fetchTransactions(hours: number, site?: string) {
+export function fetchTransactions(hours: number, site?: string, cardType?: string) {
   const params = new URLSearchParams({ hours: String(hours) });
   if (site) params.set("site", site);
+  if (cardType) params.set("card_type", cardType);
   return fetchJSON<{ data: Transaction[] }>(`${BASE_URL}/api/transactions?${params}`);
 }
 

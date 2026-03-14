@@ -165,14 +165,37 @@ async function handleIngest(req: Request, env: Env): Promise<Response> {
   }
 }
 
-async function handleSnapshotsLatest(env: Env): Promise<Response> {
-  const result = await env.DB.prepare(
-    `SELECT * FROM price_snapshots
-     WHERE (site_name, scraped_at) IN (
-       SELECT site_name, MAX(scraped_at) FROM price_snapshots GROUP BY site_name
+async function handleSnapshotsLatest(req: Request, env: Env): Promise<Response> {
+  const url = new URL(req.url);
+  const cardType = url.searchParams.get("card_type");
+
+  if (cardType && !ALLOWED_CARD_TYPES.includes(cardType as (typeof ALLOWED_CARD_TYPES)[number])) {
+    return json({ error: "Invalid card_type" }, 400);
+  }
+
+  let query: string;
+  let result;
+  if (cardType) {
+    query = `SELECT * FROM price_snapshots
+     WHERE card_type = ?
+       AND (site_name, scraped_at) IN (
+         SELECT site_name, MAX(scraped_at)
+         FROM price_snapshots
+         WHERE card_type = ?
+         GROUP BY site_name
+       )
+     ORDER BY site_name`;
+    result = await env.DB.prepare(query).bind(cardType, cardType).all();
+  } else {
+    query = `SELECT * FROM price_snapshots
+     WHERE (site_name, card_type, scraped_at) IN (
+       SELECT site_name, card_type, MAX(scraped_at)
+       FROM price_snapshots
+       GROUP BY site_name, card_type
      )
-     ORDER BY site_name`
-  ).all();
+     ORDER BY site_name, card_type`;
+    result = await env.DB.prepare(query).all();
+  }
   return json({ data: result.results });
 }
 
@@ -264,7 +287,7 @@ export default {
       if (req.method === "POST" && path === "/api/ingest") {
         res = await handleIngest(req, env);
       } else if (req.method === "GET" && path === "/api/snapshots/latest") {
-        res = await handleSnapshotsLatest(env);
+        res = await handleSnapshotsLatest(req, env);
       } else if (req.method === "GET" && path === "/api/snapshots") {
         res = await handleSnapshots(req, env);
       } else if (req.method === "GET" && path === "/api/transactions") {
