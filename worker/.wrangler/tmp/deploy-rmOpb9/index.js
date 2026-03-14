@@ -1,150 +1,117 @@
-export interface Env {
-  DB: D1Database;
-  INGEST_SECRET_TOKEN: string;
-  FRONTEND_ORIGIN: string;
-}
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
-const ALLOWED_SITES = ["ama-gift", "giftissue", "beterugift", "amaten"] as const;
-const ALLOWED_CARD_TYPES = ["amazon", "google_play", "apple"] as const;
-
-function corsHeaders(origin: string | null, allowedOrigin: string) {
-  const headers: Record<string, string> = {
+// src/index.ts
+var ALLOWED_SITES = ["ama-gift", "giftissue", "beterugift", "amaten"];
+var ALLOWED_CARD_TYPES = ["amazon", "google_play", "apple"];
+function corsHeaders(origin, allowedOrigin) {
+  const headers = {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
   };
-  // Allow configured origin or localhost for dev
-  if (
-    origin &&
-    (origin === allowedOrigin ||
-      origin.startsWith("http://localhost") ||
-      origin.startsWith("http://127.0.0.1"))
-  ) {
+  if (origin && (origin === allowedOrigin || origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1"))) {
     headers["Access-Control-Allow-Origin"] = origin;
   } else {
     headers["Access-Control-Allow-Origin"] = allowedOrigin;
   }
   return headers;
 }
-
-function json(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
+__name(corsHeaders, "corsHeaders");
+function json(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...extraHeaders },
+    headers: { "Content-Type": "application/json", ...extraHeaders }
   });
 }
-
-// ---- バリデーション ----
-
-function isISO8601UTC(s: string): boolean {
+__name(json, "json");
+function isISO8601UTC(s) {
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(s);
 }
-
-function isWithinOneHour(scraped_at: string): boolean {
+__name(isISO8601UTC, "isISO8601UTC");
+function isWithinOneHour(scraped_at) {
   const diff = Math.abs(Date.now() - new Date(scraped_at).getTime());
-  return diff <= 60 * 60 * 1000;
+  return diff <= 60 * 60 * 1e3;
 }
-
-interface SnapshotInput {
-  site_name: string;
-  card_type: string;
-  listing_count: number;
-  best_discount_rate: number;
-  worst_discount_rate: number;
-  avg_discount_rate: number;
-  median_discount_rate: number;
-}
-
-interface TransactionInput {
-  site_name: string;
-  card_type: string;
-  traded_at: string;
-  face_value: number;
-  traded_price: number;
-  discount_rate: number;
-}
-
-function validateSnapshot(s: unknown): s is SnapshotInput {
+__name(isWithinOneHour, "isWithinOneHour");
+function validateSnapshot(s) {
   if (typeof s !== "object" || s === null) return false;
-  const o = s as Record<string, unknown>;
-  if (!ALLOWED_SITES.includes(o.site_name as (typeof ALLOWED_SITES)[number])) return false;
-  if (!ALLOWED_CARD_TYPES.includes(o.card_type as (typeof ALLOWED_CARD_TYPES)[number])) return false;
-  if (!Number.isInteger(o.listing_count) || (o.listing_count as number) < 0) return false;
+  const o = s;
+  if (!ALLOWED_SITES.includes(o.site_name)) return false;
+  if (!ALLOWED_CARD_TYPES.includes(o.card_type)) return false;
+  if (!Number.isInteger(o.listing_count) || o.listing_count < 0) return false;
   for (const key of ["best_discount_rate", "worst_discount_rate", "avg_discount_rate", "median_discount_rate"]) {
-    const v = o[key] as number;
+    const v = o[key];
     if (typeof v !== "number" || v < 0 || v >= 100) return false;
   }
-  const best = o.best_discount_rate as number;
-  const avg = o.avg_discount_rate as number;
-  const median = o.median_discount_rate as number;
-  const worst = o.worst_discount_rate as number;
+  const best = o.best_discount_rate;
+  const avg = o.avg_discount_rate;
+  const median = o.median_discount_rate;
+  const worst = o.worst_discount_rate;
   if (!(best >= worst)) return false;
   return true;
 }
-
-function validateTransaction(t: unknown): t is TransactionInput {
+__name(validateSnapshot, "validateSnapshot");
+function validateTransaction(t) {
   if (typeof t !== "object" || t === null) return false;
-  const o = t as Record<string, unknown>;
-  if (!ALLOWED_SITES.includes(o.site_name as (typeof ALLOWED_SITES)[number])) return false;
-  if (!ALLOWED_CARD_TYPES.includes(o.card_type as (typeof ALLOWED_CARD_TYPES)[number])) return false;
+  const o = t;
+  if (!ALLOWED_SITES.includes(o.site_name)) return false;
+  if (!ALLOWED_CARD_TYPES.includes(o.card_type)) return false;
   if (typeof o.traded_at !== "string" || !isISO8601UTC(o.traded_at)) return false;
-  if (!Number.isInteger(o.face_value) || (o.face_value as number) <= 0) return false;
-  if (!Number.isInteger(o.traded_price) || (o.traded_price as number) <= 0) return false;
-  if ((o.traded_price as number) >= (o.face_value as number)) return false;
-  if (typeof o.discount_rate !== "number" || (o.discount_rate as number) < 0 || (o.discount_rate as number) >= 100) return false;
+  if (!Number.isInteger(o.face_value) || o.face_value <= 0) return false;
+  if (!Number.isInteger(o.traded_price) || o.traded_price <= 0) return false;
+  if (o.traded_price >= o.face_value) return false;
+  if (typeof o.discount_rate !== "number" || o.discount_rate < 0 || o.discount_rate >= 100) return false;
   return true;
 }
-
-// ---- ハンドラー ----
-
-async function handleIngest(req: Request, env: Env): Promise<Response> {
+__name(validateTransaction, "validateTransaction");
+async function handleIngest(req, env) {
   const auth = req.headers.get("Authorization");
   if (!auth || auth !== `Bearer ${env.INGEST_SECRET_TOKEN}`) {
     return json({ error: "Unauthorized" }, 401);
   }
-
-  let body: unknown;
+  let body;
   try {
     body = await req.json();
   } catch {
     return json({ error: "Invalid JSON" }, 400);
   }
-
   if (typeof body !== "object" || body === null) return json({ error: "Invalid body" }, 400);
-  const { scraped_at, snapshots, transactions } = body as Record<string, unknown>;
-
+  const { scraped_at, snapshots, transactions } = body;
   if (typeof scraped_at !== "string" || !isISO8601UTC(scraped_at)) {
     return json({ error: "scraped_at must be ISO 8601 UTC" }, 400);
   }
   if (!isWithinOneHour(scraped_at)) {
-    return json({ error: "scraped_at is too old or in the future (must be within ±1 hour)" }, 400);
+    return json({ error: "scraped_at is too old or in the future (must be within \xB11 hour)" }, 400);
   }
   if (!Array.isArray(snapshots)) return json({ error: "snapshots must be an array" }, 400);
   if (!Array.isArray(transactions)) return json({ error: "transactions must be an array" }, 400);
-
   for (const s of snapshots) {
     if (!validateSnapshot(s)) return json({ error: "Invalid snapshot data", data: s }, 400);
   }
   for (const t of transactions) {
     if (!validateTransaction(t)) return json({ error: "Invalid transaction data", data: t }, 400);
   }
-
   try {
-    const stmts: D1PreparedStatement[] = [];
-
-    for (const s of snapshots as SnapshotInput[]) {
+    const stmts = [];
+    for (const s of snapshots) {
       stmts.push(
         env.DB.prepare(
           `INSERT OR REPLACE INTO price_snapshots
             (site_name, card_type, scraped_at, listing_count, best_discount_rate, worst_discount_rate, avg_discount_rate, median_discount_rate)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         ).bind(
-          s.site_name, s.card_type, scraped_at, s.listing_count,
-          s.best_discount_rate, s.worst_discount_rate, s.avg_discount_rate, s.median_discount_rate
+          s.site_name,
+          s.card_type,
+          scraped_at,
+          s.listing_count,
+          s.best_discount_rate,
+          s.worst_discount_rate,
+          s.avg_discount_rate,
+          s.median_discount_rate
         )
       );
     }
-
-    for (const t of transactions as TransactionInput[]) {
+    for (const t of transactions) {
       stmts.push(
         env.DB.prepare(
           `INSERT OR IGNORE INTO transactions
@@ -153,19 +120,17 @@ async function handleIngest(req: Request, env: Env): Promise<Response> {
         ).bind(t.site_name, t.card_type, t.traded_at, t.face_value, t.traded_price, t.discount_rate, scraped_at)
       );
     }
-
     if (stmts.length > 0) {
       await env.DB.batch(stmts);
     }
-
     return json({ inserted_snapshots: snapshots.length, inserted_transactions: transactions.length });
   } catch (e) {
     console.error(e);
     return json({ error: "DB write failed" }, 500);
   }
 }
-
-async function handleSnapshotsLatest(env: Env): Promise<Response> {
+__name(handleIngest, "handleIngest");
+async function handleSnapshotsLatest(env) {
   const result = await env.DB.prepare(
     `SELECT * FROM price_snapshots
      WHERE (site_name, scraped_at) IN (
@@ -175,33 +140,36 @@ async function handleSnapshotsLatest(env: Env): Promise<Response> {
   ).all();
   return json({ data: result.results });
 }
-
-async function handleSnapshots(req: Request, env: Env): Promise<Response> {
+__name(handleSnapshotsLatest, "handleSnapshotsLatest");
+async function handleSnapshots(req, env) {
   const url = new URL(req.url);
   let hours = parseInt(url.searchParams.get("hours") ?? "24", 10);
   if (isNaN(hours) || hours < 1) hours = 24;
   if (hours > 168) hours = 168;
   const site = url.searchParams.get("site");
   const cardType = url.searchParams.get("card_type");
-
-  if (site && !ALLOWED_SITES.includes(site as (typeof ALLOWED_SITES)[number])) {
+  if (site && !ALLOWED_SITES.includes(site)) {
     return json({ error: "Invalid site" }, 400);
   }
-  if (cardType && !ALLOWED_CARD_TYPES.includes(cardType as (typeof ALLOWED_CARD_TYPES)[number])) {
+  if (cardType && !ALLOWED_CARD_TYPES.includes(cardType)) {
     return json({ error: "Invalid card_type" }, 400);
   }
-
   const conditions = [`scraped_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-' || ? || ' hours')`];
-  const params: unknown[] = [String(hours)];
-  if (site) { conditions.push("site_name = ?"); params.push(site); }
-  if (cardType) { conditions.push("card_type = ?"); params.push(cardType); }
-
+  const params = [String(hours)];
+  if (site) {
+    conditions.push("site_name = ?");
+    params.push(site);
+  }
+  if (cardType) {
+    conditions.push("card_type = ?");
+    params.push(cardType);
+  }
   const query = `SELECT * FROM price_snapshots WHERE ${conditions.join(" AND ")} ORDER BY scraped_at ASC`;
   const result = await env.DB.prepare(query).bind(...params).all();
   return json({ data: result.results });
 }
-
-async function handleTransactions(req: Request, env: Env): Promise<Response> {
+__name(handleSnapshots, "handleSnapshots");
+async function handleTransactions(req, env) {
   const url = new URL(req.url);
   const site = url.searchParams.get("site");
   const cardType = url.searchParams.get("card_type");
@@ -211,55 +179,51 @@ async function handleTransactions(req: Request, env: Env): Promise<Response> {
   if (hours > 168) hours = 168;
   if (isNaN(limit) || limit < 1) limit = 100;
   if (limit > 500) limit = 500;
-
-  if (site && !ALLOWED_SITES.includes(site as (typeof ALLOWED_SITES)[number])) {
+  if (site && !ALLOWED_SITES.includes(site)) {
     return json({ error: "Invalid site" }, 400);
   }
-  if (cardType && !ALLOWED_CARD_TYPES.includes(cardType as (typeof ALLOWED_CARD_TYPES)[number])) {
+  if (cardType && !ALLOWED_CARD_TYPES.includes(cardType)) {
     return json({ error: "Invalid card_type" }, 400);
   }
-
   const conditions = [`traded_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-' || ? || ' hours')`];
-  const params: unknown[] = [String(hours)];
-  if (site) { conditions.push("site_name = ?"); params.push(site); }
-  if (cardType) { conditions.push("card_type = ?"); params.push(cardType); }
+  const params = [String(hours)];
+  if (site) {
+    conditions.push("site_name = ?");
+    params.push(site);
+  }
+  if (cardType) {
+    conditions.push("card_type = ?");
+    params.push(cardType);
+  }
   params.push(String(limit));
-
   const query = `SELECT * FROM transactions WHERE ${conditions.join(" AND ")} ORDER BY traded_at DESC LIMIT ?`;
   const result = await env.DB.prepare(query).bind(...params).all();
   return json({ data: result.results });
 }
-
-async function handleHealth(env: Env): Promise<Response> {
+__name(handleTransactions, "handleTransactions");
+async function handleHealth(env) {
   const result = await env.DB.prepare(
     `SELECT MAX(scraped_at) as latest_scraped_at FROM price_snapshots`
-  ).first<{ latest_scraped_at: string | null }>();
-
+  ).first();
   const latest = result?.latest_scraped_at ?? null;
   let stale = true;
   if (latest) {
     const diff = Date.now() - new Date(latest).getTime();
-    stale = diff > 2 * 60 * 60 * 1000;
+    stale = diff > 2 * 60 * 60 * 1e3;
   }
-
   return json({ status: "ok", latest_scraped_at: latest, stale });
 }
-
-// ---- メインエントリ ----
-
-export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+__name(handleHealth, "handleHealth");
+var index_default = {
+  async fetch(req, env) {
     const origin = req.headers.get("Origin");
     const cors = corsHeaders(origin, env.FRONTEND_ORIGIN ?? "");
-
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: cors });
     }
-
     const url = new URL(req.url);
     const path = url.pathname;
-
-    let res: Response;
+    let res;
     try {
       if (req.method === "POST" && path === "/api/ingest") {
         res = await handleIngest(req, env);
@@ -278,12 +242,14 @@ export default {
       console.error(e);
       res = json({ error: "Internal server error" }, 500);
     }
-
-    // CORSヘッダーを全レスポンスに付与
     const newHeaders = new Headers(res.headers);
     for (const [k, v] of Object.entries(cors)) {
       newHeaders.set(k, v);
     }
     return new Response(res.body, { status: res.status, headers: newHeaders });
-  },
+  }
 };
+export {
+  index_default as default
+};
+//# sourceMappingURL=index.js.map

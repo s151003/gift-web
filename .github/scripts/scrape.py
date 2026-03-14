@@ -39,21 +39,21 @@ def make_session() -> requests.Session:
     return session
 
 
-def scrape_site_with_retry(module, session: requests.Session) -> tuple[str, object]:
+def scrape_site_with_retry(module, session: requests.Session) -> tuple[str, list[dict]]:
     site_name = module.SITE_NAME
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             result = module.scrape(session)
-            if result is not None:
+            if result:
                 print(f"[{site_name}] 成功 (attempt {attempt})", flush=True)
                 return site_name, result
-            print(f"[{site_name}] attempt {attempt}: scrape() が None を返しました", flush=True)
+            print(f"[{site_name}] attempt {attempt}: scrape() が空を返しました", flush=True)
         except Exception as e:
             print(f"[{site_name}] attempt {attempt}: 例外 - {e}", flush=True)
         if attempt < MAX_RETRIES:
             time.sleep(RETRY_WAIT)
     print(f"[{site_name}] 全試行失敗", flush=True)
-    return site_name, None
+    return site_name, []
 
 
 def main() -> int:
@@ -80,15 +80,17 @@ def main() -> int:
 
     # 並列スクレイプ
     snapshots: list[dict] = []
+    success_count = 0
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {
             executor.submit(scrape_site_with_retry, mod, session): site
             for site, mod in modules.items()
         }
         for future in as_completed(futures):
-            site_name, result = future.result()
-            if result is not None:
-                snapshots.append(result)
+            site_name, results = future.result()
+            if results:
+                snapshots.extend(results)
+                success_count += 1
 
     # 取引履歴（対応サイトのみ）
     transactions: list[dict] = []
@@ -101,11 +103,11 @@ def main() -> int:
             except Exception as e:
                 print(f"[{site}] 取引履歴取得エラー: {e}", flush=True)
 
-    print(f"[scrape] スナップショット: {len(snapshots)}/{len(modules)}サイト成功", flush=True)
+    print(f"[scrape] スナップショット: {success_count}/{len(modules)}サイト成功 ({len(snapshots)}件)", flush=True)
     print(f"[scrape] 取引履歴: {len(transactions)}件", flush=True)
 
     # 全サイト失敗の場合はエラー終了
-    if len(snapshots) == 0:
+    if success_count == 0:
         print("[scrape] 全サイト失敗。送信しません。", file=sys.stderr)
         return 1
 
