@@ -15,6 +15,7 @@ Thumbs.db
 
 # Wrangler
 worker/.wrangler/
+frontend/.wrangler/
 
 # Claude internal
 .claude/
