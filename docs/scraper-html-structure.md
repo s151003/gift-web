@@ -197,7 +197,40 @@ for tr in soup.select("tbody tr"):
 ```
 
 ### 取引履歴
-**なし**（確認できず）
+
+**あり（実装済み）** — 同ページ（`/home/load/1`）の **2番目の `<table>`**（見出し: 直近取引履歴）に含まれる。
+
+#### テーブル構造
+
+```
+tbody > tr の td 構成:
+
+td[0]: class="table_pics"  → img[src] — ファイル名が "1.jpg" で終わればAmazon
+td[1]: class="trlist"      → 日時  "03/14 21:47"（JST, MM/DD HH:MM）★PC用
+td[2]: class="trlist"      → 額面  "10,000円"                        ★PC用
+td[3]: class="trlist"      → 成立価格 "8,450円"                      ★PC用
+td[4]: class="trlist"      → 販売率 "84.5%"                          ★PC用
+td[5..]: class="trlist"    → モバイル用の重複セル（先頭4つのみ使用）
+```
+
+#### フィルタ・パース方法
+
+```python
+# Amazon判定
+img = tr.select_one("td.table_pics img")
+if not img or not img["src"].endswith("1.jpg"):
+    continue
+
+# 重複セルの先頭4つだけ使う
+trlist_tds = tr.select("td.trlist")[:4]
+date_text, face_text, price_text, rate_text = [td.get_text(strip=True) for td in trlist_tds]
+
+# 日時: JST → UTC変換（年跨ぎ対策あり）
+dt_jst = datetime.strptime(f"{now_jst.year}/{date_text}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
+if dt_jst > now_jst + timedelta(hours=1):
+    dt_jst = dt_jst.replace(year=dt_jst.year - 1)
+traded_at = dt_jst.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+```
 
 ---
 
@@ -250,7 +283,7 @@ for tr in soup.select("tbody tr"):
 |--------|--------------|--------------|---------|
 | ama-gift | GET HTML | 多数（全Amazon出品） | △ 全券種混在で取得困難 |
 | giftissue | GET HTML | 95件（ページネーションあり） | なし |
-| beterugift | GET HTML（AJAXエンドポイント） | 複数件 | なし |
+| beterugift | GET HTML（AJAXエンドポイント） | 複数件 | ✅ 同ページ2番目のtable、Amazon券で絞り込み |
 | amaten | GET HTML | 350件 | ログイン必須 |
 
 ## スクレイパー変更履歴
@@ -259,3 +292,4 @@ for tr in soup.select("tbody tr"):
 |------|---------|
 | 2026-03-14 | 初版：当て推量のセレクタで記述（`.discount-rate`等）→ 動作しない |
 | 2026-03-14 | Chrome MCPでDOM調査後に全4サイトを正しいセレクタに書き直し |
+| 2026-03-14 | beterugift: 取引履歴テーブルの構造を確認・実装済みに更新 |
