@@ -1,0 +1,8 @@
+name = "gift-web-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gift-web-db"
+database_id = "1e0e3556-ac72-4526-8022-eedeba78ecf6"
