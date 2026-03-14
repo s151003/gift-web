@@ -1,0 +1,27 @@
+name: Scrape Gift Card Prices
+
+on:
+  schedule:
+    - cron: "0 * * * *" # 毎時0分（UTC）
+  workflow_dispatch: # 手動実行も可能
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # ハング防止
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 lxml
+
+      - name: Run scraper
+        run: python .github/scripts/scrape.py
+        env:
+          INGEST_SECRET_TOKEN: ${{ secrets.INGEST_SECRET_TOKEN }}
+          WORKER_URL: ${{ secrets.WORKER_URL }}
